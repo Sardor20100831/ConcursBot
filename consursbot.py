@@ -274,7 +274,12 @@ async def start(msg: types.Message):
 @dp.callback_query_handler(lambda c: c.data == "check_sub")
 async def check_subscription(call: types.CallbackQuery):
     user_id = call.from_user.id
-    if await check_sub(user_id):
+    
+    # Debug: check subscription status
+    is_subscribed = await check_sub(user_id)
+    logging.info(f"User {user_id} subscription check: {is_subscribed}")
+    
+    if is_subscribed:
         await give_invite_reward(user_id)
         
         await call.message.delete()
