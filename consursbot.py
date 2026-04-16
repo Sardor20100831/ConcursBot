@@ -25,7 +25,7 @@ threading.Thread(target=run).start()
 
 
 
-TOKEN = "8704916545:AAFXQMIiQDy7viSehEDAhF0XlX2_euTFbro"
+TOKEN = "8704916545:AAGfrwihEJ6W9EcpQpjdBwPc7747Om4vN1Y"
 ADMIN_IDS = [5475526744, 5687217504]
 
 bot = Bot(token=TOKEN)
