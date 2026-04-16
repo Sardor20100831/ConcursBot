@@ -202,19 +202,16 @@ async def start(msg: types.Message):
                 (user_id, invited_by)
             )
 
-            if invited_by and invited_by != user_id:
-                logging.info(f"User {user_id} invited by {invited_by}")
-                if await is_user_suspicious(invited_by):
-                    await log_suspicious_activity(user_id, "suspicious_inviter", f"Invited by suspicious user: {invited_by}")
-                else:
-                    # If no mandatory channels, give reward immediately
-                    if not CHANNELS:
-                        logging.info(f"No channels, giving immediate reward for user {user_id}")
-                        await give_invite_reward(user_id)
-                    else:
-                        logging.info(f"Channels exist, user {user_id} must subscribe first")
-
             await db.commit()
+
+            # FIRE MUHIM JOY
+            if invited_by:
+                if not CHANNELS:
+                    # kanal yo'q -> darrov reward
+                    await give_invite_reward(user_id)
+                else:
+                    # kanal bor -> keyin tekshiriladi
+                    pass
 
         cur = await db.execute("SELECT invites, rewarded FROM users WHERE user_id=?", (user_id,))
         result = await cur.fetchone()
@@ -294,48 +291,52 @@ async def check_subscription(call: types.CallbackQuery):
 
 # -------- GIVE INVITE REWARD --------
 async def give_invite_reward(user_id):
-    logging.info(f"give_invite_reward called for user {user_id}")
-    
     async with aiosqlite.connect(DB) as db:
-        cur = await db.execute("SELECT invited_by, rewarded_invite FROM users WHERE user_id=?", (user_id,))
-        user_data = await cur.fetchone()
+        cur = await db.execute(
+            "SELECT invited_by, rewarded_invite FROM users WHERE user_id=?",
+            (user_id,)
+        )
+        data = await cur.fetchone()
+
+        if not data:
+            return
+
+        invited_by, rewarded = data
+
+        # tekshiruv
+        if not invited_by or rewarded == 1:
+            return
+
+        # inviterga ball
+        await db.execute(
+            "UPDATE users SET invites = invites + 1 WHERE user_id=?",
+            (invited_by,)
+        )
+
+        # bu user ishlatilgan deb belgilanadi
+        await db.execute(
+            "UPDATE users SET rewarded_invite = 1 WHERE user_id=?",
+            (user_id,)
+        )
+
+        await db.commit()
         
-        logging.info(f"User data: {user_data}")
-        
-        if user_data and user_data[0] and user_data[1] == 0:  # Has inviter and not yet rewarded
-            invited_by = user_data[0]
-            logging.info(f"Rewarding inviter {invited_by} for user {user_id}")
+        # Notify inviter
+        try:
+            if CHANNELS:
+                message = f"** Tabriklaymiz!\n\n" \
+                        f"** Siz taklif qilgan foydalanuvchi kanallarga obuna bo'ldi!\n" \
+                        f"** Sizga 1 ball qo'shildi!\n" \
+                        f"** Jami ballar: {await get_user_invites(invited_by)}"
+            else:
+                message = f"** Tabriklaymiz!\n\n" \
+                        f"** Siz taklif qilgan foydalanuvchi botga start bosdi!\n" \
+                        f"** Sizga 1 ball qo'shildi!\n" \
+                        f"** Jami ballar: {await get_user_invites(invited_by)}"
             
-            # Give reward to inviter
-            await db.execute(
-                "UPDATE users SET invites=invites+1, rewarded_invite=1 WHERE user_id=?",
-                (invited_by,)
-            )
-            
-            # Mark this user as processed for invite reward
-            await db.execute(
-                "UPDATE users SET rewarded_invite=1 WHERE user_id=?",
-                (user_id,)
-            )
-            
-            await db.commit()
-            
-            # Notify inviter
-            try:
-                if CHANNELS:
-                    message = f"** Tabriklaymiz!\n\n" \
-                            f"** Siz taklif qilgan foydalanuvchi kanallarga obuna bo'ldi!\n" \
-                            f"** Sizga 1 ball qo'shildi!\n" \
-                            f"** Jami ballar: {await get_user_invites(invited_by)}"
-                else:
-                    message = f"** Tabriklaymiz!\n\n" \
-                            f"** Siz taklif qilgan foydalanuvchi botga start bosdi!\n" \
-                            f"** Sizga 1 ball qo'shildi!\n" \
-                            f"** Jami ballar: {await get_user_invites(invited_by)}"
-                
-                await bot.send_message(invited_by, message, parse_mode=ParseMode.HTML)
-            except:
-                pass
+            await bot.send_message(invited_by, message, parse_mode=ParseMode.HTML)
+        except:
+            pass
         
     
 
