@@ -206,8 +206,9 @@ async def start(msg: types.Message):
                 if await is_user_suspicious(invited_by):
                     await log_suspicious_activity(user_id, "suspicious_inviter", f"Invited by suspicious user: {invited_by}")
                 else:
-                    # Don't give reward immediately - wait for subscription
-                    pass
+                    # If no mandatory channels, give reward immediately
+                    if not CHANNELS:
+                        await give_invite_reward(user_id)
 
             await db.commit()
 
@@ -274,40 +275,53 @@ async def start(msg: types.Message):
 async def check_subscription(call: types.CallbackQuery):
     user_id = call.from_user.id
     if await check_sub(user_id):
-        # Check if user was invited and give reward to inviter
-        async with aiosqlite.connect(DB) as db:
-            cur = await db.execute("SELECT invited_by, rewarded_invite FROM users WHERE user_id=?", (user_id,))
-            user_data = await cur.fetchone()
+        await give_invite_reward(user_id)
+        
+        await call.message.delete()
+        await call.message.answer("Siz obuna bo'lgansiz! Endi botdan foydalanishingiz mumkin.")
+        await start(call.message)
+    else:
+        await call.answer(" Hali ham obuna emassiz!", show_alert=True)
+
+# -------- GIVE INVITE REWARD --------
+async def give_invite_reward(user_id):
+    async with aiosqlite.connect(DB) as db:
+        cur = await db.execute("SELECT invited_by, rewarded_invite FROM users WHERE user_id=?", (user_id,))
+        user_data = await cur.fetchone()
+        
+        if user_data and user_data[0] and user_data[1] == 0:  # Has inviter and not yet rewarded
+            invited_by = user_data[0]
             
-            if user_data and user_data[0] and user_data[1] == 0:  # Has inviter and not yet rewarded
-                invited_by = user_data[0]
+            # Give reward to inviter
+            await db.execute(
+                "UPDATE users SET invites=invites+1, rewarded_invite=1 WHERE user_id=?",
+                (invited_by,)
+            )
+            
+            # Mark this user as processed for invite reward
+            await db.execute(
+                "UPDATE users SET rewarded_invite=1 WHERE user_id=?",
+                (user_id,)
+            )
+            
+            await db.commit()
+            
+            # Notify inviter
+            try:
+                if CHANNELS:
+                    message = f"** Tabriklaymiz!\n\n" \
+                            f"** Siz taklif qilgan foydalanuvchi kanallarga obuna bo'ldi!\n" \
+                            f"** Sizga 1 ball qo'shildi!\n" \
+                            f"** Jami ballar: {await get_user_invites(invited_by)}"
+                else:
+                    message = f"** Tabriklaymiz!\n\n" \
+                            f"** Siz taklif qilgan foydalanuvchi botga start bosdi!\n" \
+                            f"** Sizga 1 ball qo'shildi!\n" \
+                            f"** Jami ballar: {await get_user_invites(invited_by)}"
                 
-                # Give reward to inviter
-                await db.execute(
-                    "UPDATE users SET invites=invites+1, rewarded_invite=1 WHERE user_id=?",
-                    (invited_by,)
-                )
-                
-                # Mark this user as processed for invite reward
-                await db.execute(
-                    "UPDATE users SET rewarded_invite=1 WHERE user_id=?",
-                    (user_id,)
-                )
-                
-                await db.commit()
-                
-                # Notify inviter
-                try:
-                    await bot.send_message(
-                        invited_by,
-                        f"🎉 <b>Tabriklaymiz!</b>\n\n"
-                        f"👤 Siz taklif qilgan foydalanuvchi kanallarga obuna bo'ldi!\n"
-                        f"🎯 Sizga 1 ball qo'shildi!\n"
-                        f"📊 Jami ballar: {await get_user_invites(invited_by)}",
-                        parse_mode=ParseMode.HTML
-                    )
-                except:
-                    pass
+                await bot.send_message(invited_by, message, parse_mode=ParseMode.HTML)
+            except:
+                pass
         
         await call.message.delete()
         await call.message.answer("✅ Siz obuna bo'lgansiz! Endi botdan foydalanishingiz mumkin.")
