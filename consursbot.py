@@ -210,8 +210,12 @@ async def start(msg: types.Message):
 
         cur = await db.execute("SELECT invites, rewarded FROM users WHERE user_id=?", (user_id,))
         result = await cur.fetchone()
-        invites = result[0]
-        rewarded = result[1]
+        if not result:
+            invites = 0
+            rewarded = 0
+        else:
+            invites = result[0]
+            rewarded = result[1]
 
     bot_info = await bot.get_me()
     link = f"https://t.me/{bot_info.username}?start={user_id}"
@@ -307,6 +311,9 @@ async def check(call: types.CallbackQuery):
                 (user_id,)
             )
             result = await cur.fetchone()
+            if not result:
+                await call.answer("❌ Siz ro'yxatdan o'tmagansiz!", show_alert=True)
+                return
             invites, rewarded = result
 
             if invites >= REQUIRED_INVITES and rewarded == 0:
@@ -407,6 +414,9 @@ async def stat(call: types.CallbackQuery):
             (user_id,)
         )
         result = await cur.fetchone()
+        if not result:
+            await call.answer("❌ Siz ro'yxatdan o'tmagansiz!", show_alert=True)
+            return
         invites = result[0]
         rewarded = result[1]
 
@@ -458,7 +468,11 @@ async def top(call: types.CallbackQuery):
             "SELECT invites FROM users WHERE user_id=?",
             (call.from_user.id,)
         )
-        user_invites = (await cur.fetchone())[0]
+        user_result = await cur.fetchone()
+        if not user_result:
+            await call.answer("❌ Siz ro'yxatdan o'tmagansiz!", show_alert=True)
+            return
+        user_invites = user_result[0]
 
         cur = await db.execute(
             "SELECT COUNT(*) + 1 FROM users WHERE invites > ?",
