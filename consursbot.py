@@ -323,11 +323,7 @@ async def give_invite_reward(user_id):
             except:
                 pass
         
-        await call.message.delete()
-        await call.message.answer("✅ Siz obuna bo'lgansiz! Endi botdan foydalanishingiz mumkin.")
-        await start(call.message)
-    else:
-        await call.answer("❌ Hali ham obuna emassiz!", show_alert=True)
+    
 
 # -------- CHECK --------
 @dp.callback_query_handler(lambda c: c.data == "check")
