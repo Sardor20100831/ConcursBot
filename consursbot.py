@@ -1,6 +1,7 @@
 import logging
 import aiosqlite
 import asyncio
+import time
 from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
@@ -1035,5 +1036,11 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     loop = asyncio.get_event_loop()
     loop.run_until_complete(init_db())
-    executor.start_polling(dp)
+    
+    try:
+        executor.start_polling(dp, skip_updates=True)
+    except Exception as e:
+        logging.error(f"Bot error: {e}")
+        time.sleep(5)
+        executor.start_polling(dp, skip_updates=True)
 
