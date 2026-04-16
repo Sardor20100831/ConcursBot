@@ -50,6 +50,7 @@ async def init_db():
             invites INTEGER DEFAULT 0,
             invited_users TEXT DEFAULT '',
             rewarded INTEGER DEFAULT 0,
+            rewarded_invite INTEGER DEFAULT 0,
             join_date DATETIME DEFAULT CURRENT_TIMESTAMP,
             last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
             is_blocked INTEGER DEFAULT 0,
@@ -58,6 +59,13 @@ async def init_db():
             link_used INTEGER DEFAULT 0
         )
         """)
+        
+        # Add rewarded_invite column if it doesn't exist (for existing databases)
+        try:
+            await db.execute("ALTER TABLE users ADD COLUMN rewarded_invite INTEGER DEFAULT 0")
+        except:
+            pass
+        
         await db.commit()
 
         try:
@@ -129,6 +137,13 @@ async def update_user_activity(user_id):
     except:
         pass
 
+# -------- GET USER INVITES --------
+async def get_user_invites(user_id):
+    async with aiosqlite.connect(DB) as db:
+        cur = await db.execute("SELECT invites FROM users WHERE user_id=?", (user_id,))
+        result = await cur.fetchone()
+        return result[0] if result else 0
+
 # -------- SUB CHECK --------
 async def check_sub(user_id):
     if not CHANNELS:
@@ -191,21 +206,8 @@ async def start(msg: types.Message):
                 if await is_user_suspicious(invited_by):
                     await log_suspicious_activity(user_id, "suspicious_inviter", f"Invited by suspicious user: {invited_by}")
                 else:
-                    cur = await db.execute(
-                        "SELECT invited_users FROM users WHERE user_id=?",
-                        (invited_by,)
-                    )
-                    row = await cur.fetchone()
-                    invited_list = row[0].split(",") if row[0] else []
-
-                    if str(user_id) not in invited_list:
-                        invited_list.append(str(user_id))
-                        await db.execute(
-                            "UPDATE users SET invites=invites+1, invited_users=? WHERE user_id=?",
-                            (",".join(invited_list), invited_by)
-                        )
-                    else:
-                        await log_suspicious_activity(invited_by, "duplicate_invite", f"Tried to invite same user: {user_id}")
+                    # Don't give reward immediately - wait for subscription
+                    pass
 
             await db.commit()
 
@@ -272,6 +274,41 @@ async def start(msg: types.Message):
 async def check_subscription(call: types.CallbackQuery):
     user_id = call.from_user.id
     if await check_sub(user_id):
+        # Check if user was invited and give reward to inviter
+        async with aiosqlite.connect(DB) as db:
+            cur = await db.execute("SELECT invited_by, rewarded_invite FROM users WHERE user_id=?", (user_id,))
+            user_data = await cur.fetchone()
+            
+            if user_data and user_data[0] and user_data[1] == 0:  # Has inviter and not yet rewarded
+                invited_by = user_data[0]
+                
+                # Give reward to inviter
+                await db.execute(
+                    "UPDATE users SET invites=invites+1, rewarded_invite=1 WHERE user_id=?",
+                    (invited_by,)
+                )
+                
+                # Mark this user as processed for invite reward
+                await db.execute(
+                    "UPDATE users SET rewarded_invite=1 WHERE user_id=?",
+                    (user_id,)
+                )
+                
+                await db.commit()
+                
+                # Notify inviter
+                try:
+                    await bot.send_message(
+                        invited_by,
+                        f"🎉 <b>Tabriklaymiz!</b>\n\n"
+                        f"👤 Siz taklif qilgan foydalanuvchi kanallarga obuna bo'ldi!\n"
+                        f"🎯 Sizga 1 ball qo'shildi!\n"
+                        f"📊 Jami ballar: {await get_user_invites(invited_by)}",
+                        parse_mode=ParseMode.HTML
+                    )
+                except:
+                    pass
+        
         await call.message.delete()
         await call.message.answer("✅ Siz obuna bo'lgansiz! Endi botdan foydalanishingiz mumkin.")
         await start(call.message)
