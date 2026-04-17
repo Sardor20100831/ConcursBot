@@ -208,10 +208,11 @@ async def start(msg: types.Message):
             if invited_by:
                 if not CHANNELS:
                     # kanal yo'q -> darrov reward
+                    logging.info(f"NO CHANNELS: Giving immediate reward to inviter {invited_by} for user {user_id}")
                     await give_invite_reward(user_id)
                 else:
                     # kanal bor -> keyin tekshiriladi
-                    pass
+                    logging.info(f"CHANNELS EXIST: User {user_id} must subscribe first for inviter {invited_by}")
 
         cur = await db.execute("SELECT invites, rewarded FROM users WHERE user_id=?", (user_id,))
         result = await cur.fetchone()
@@ -291,6 +292,8 @@ async def check_subscription(call: types.CallbackQuery):
 
 # -------- GIVE INVITE REWARD --------
 async def give_invite_reward(user_id):
+    logging.info(f"give_invite_reward called for user {user_id}")
+    
     async with aiosqlite.connect(DB) as db:
         cur = await db.execute(
             "SELECT invited_by, rewarded_invite FROM users WHERE user_id=?",
@@ -299,12 +302,15 @@ async def give_invite_reward(user_id):
         data = await cur.fetchone()
 
         if not data:
+            logging.info(f"No data found for user {user_id}")
             return
 
         invited_by, rewarded = data
+        logging.info(f"User {user_id} data: invited_by={invited_by}, rewarded={rewarded}")
 
         # tekshiruv
         if not invited_by or rewarded == 1:
+            logging.info(f"Skipping reward: invited_by={invited_by}, rewarded={rewarded}")
             return
 
         # inviterga ball
@@ -320,6 +326,8 @@ async def give_invite_reward(user_id):
         )
 
         await db.commit()
+        
+        logging.info(f"SUCCESS: Added 1 invite to inviter {invited_by}, marked user {user_id} as rewarded")
         
         # Notify inviter
         try:
