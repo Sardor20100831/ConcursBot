@@ -192,10 +192,26 @@ async def start(msg: types.Message):
 
         if not user:
             invited_by = int(args) if args and args.isdigit() else None
+            
+            logging.info(f"New user: {user_id}, invited_by: {invited_by}")
 
-            if invited_by == user_id:
-                await log_suspicious_activity(user_id, "self_invite", f"Tried to invite themselves: {user_id}")
+            # TOKEN yoki o'zini o'zi taklif qilishni bloklash
+            if invited_by == user_id or str(invited_by) == TOKEN.split(":")[0]:
+                await log_suspicious_activity(user_id, "invalid_invite", f"Invalid invite: {invited_by}")
                 invited_by = None
+                logging.info(f"Invalid invite detected, set invited_by to None")
+            
+            # FAKE ID ni tekshir - faqat botda mavjud userlar referal bo'la oladi
+            if invited_by:
+                cur = await db.execute(
+                    "SELECT user_id FROM users WHERE user_id=?",
+                    (invited_by,)
+                )
+                exists = await cur.fetchone()
+
+                if not exists:
+                    invited_by = None
+                    logging.info(f"Fake user ID {invited_by} not found in DB, set to None")
 
             await db.execute(
                 "INSERT INTO users (user_id, invited_by) VALUES (?, ?)",
@@ -225,6 +241,9 @@ async def start(msg: types.Message):
 
     bot_info = await bot.get_me()
     link = f"https://t.me/{bot_info.username}?start={user_id}"
+    
+    # DEBUG: Link generatsiyasini tekshirish
+    logging.info(f"LINK GENERATED: user_id={user_id}, link={link}")
 
     progress = min(100, (invites / REQUIRED_INVITES) * 100)
     filled = int(progress / 10)
