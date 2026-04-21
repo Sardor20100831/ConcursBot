@@ -210,6 +210,13 @@ async def start(msg: types.Message):
 
             await db.commit()
 
+            # FIRE MUHIM JOY - immediate reward if no channels
+            if invited_by and invited_by != user_id:
+                if not CHANNELS:
+                    # kanal yo'q -> darrov reward
+                    logging.info(f"NO CHANNELS: Giving immediate reward to inviter {invited_by} for user {user_id}")
+                    await give_invite_reward(user_id)
+
     # KEYIN subscription tekshir
     if not await check_sub(user_id):
         kb = InlineKeyboardMarkup(row_width=1)
