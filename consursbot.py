@@ -168,24 +168,14 @@ async def start(msg: types.Message):
 
     if await is_user_suspicious(user_id):
         await msg.answer(
-            "⚠️ <b>Sizning hisobingiz bloklangan!</b>\n\n"
-            "🚫 Botdan foydalanishga ruxsat berilmagan.\n"
-            "📞 Admin bilan bog'lanish uchun: /admin",
+            " Sizning hisobingiz bloklangan!</b>\n\n"
+            "Botdan foydalanishga ruxsat berilmagan.\n"
+            "Admin bilan bog'lanish uchun: /admin",
             parse_mode=ParseMode.HTML
         )
         return
 
-    if not await check_sub(user_id):
-        kb = InlineKeyboardMarkup(row_width=1)
-        for ch in CHANNELS:
-            kb.add(InlineKeyboardButton(f"👉 {ch}", url=f"https://t.me/{ch.replace('@','')}"))
-        kb.add(InlineKeyboardButton("🔄 Tekshirish", callback_data="check_sub"))
-        await msg.answer(
-            "📣 Botdan foydalanish uchun kanallarga obuna bo'ling!",
-            reply_markup=kb
-        )
-        return
-
+    # HAR DOIM USERNI SAQLA
     async with aiosqlite.connect(DB) as db:
         cur = await db.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
         user = await cur.fetchone()
@@ -220,16 +210,19 @@ async def start(msg: types.Message):
 
             await db.commit()
 
-            # FIRE MUHIM JOY
-            if invited_by:
-                if not CHANNELS:
-                    # kanal yo'q -> darrov reward
-                    logging.info(f"NO CHANNELS: Giving immediate reward to inviter {invited_by} for user {user_id}")
-                    await give_invite_reward(user_id)
-                else:
-                    # kanal bor -> keyin tekshiriladi
-                    logging.info(f"CHANNELS EXIST: User {user_id} must subscribe first for inviter {invited_by}")
+    # KEYIN subscription tekshir
+    if not await check_sub(user_id):
+        kb = InlineKeyboardMarkup(row_width=1)
+        for ch in CHANNELS:
+            kb.add(InlineKeyboardButton(f" {ch}", url=f"https://t.me/{ch.replace('@','')}"))
+        kb.add(InlineKeyboardButton(" Tekshirish", callback_data="check_sub"))
+        await msg.answer(
+            " Botdan foydalanish uchun kanallarga obuna bo'ling!",
+            reply_markup=kb
+        )
+        return
 
+    async with aiosqlite.connect(DB) as db:
         cur = await db.execute("SELECT invites, rewarded FROM users WHERE user_id=?", (user_id,))
         result = await cur.fetchone()
         if not result:
